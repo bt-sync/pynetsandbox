@@ -4,6 +4,10 @@ http://man7.org/linux/man-pages/man7/namespaces.7.html
 ## Unittests
 `sudo python3 test.py`
 
+## Install
+
+`pip3 install git+https://github.com/bt-sync/pynetsandbox`
+
 ## How to use
 
 main.py
