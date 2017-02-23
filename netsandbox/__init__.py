@@ -3,6 +3,7 @@ import os
 import binascii
 import random
 import logging
+from ipaddress import IPv4Network
 
 logger = logging.getLogger(__name__)
 
@@ -30,10 +31,22 @@ class NetworkNamespace(object):
 
 class NetworkSandbox(object):
 
-    def __init__(self):
+    def __init__(self, subnet='10.1.0.0/16'):
         self.token = binascii.b2a_hex(os.urandom(4)).decode()
         self.namespaces = []
         self.counter = 1
+        self.subnet = IPv4Network(subnet)
+        self.hosts_pool = self.subnet.hosts() 
+        self.default_gw = self.get_next_address()
+        
+        self.patterns = {
+            'token': self.token,
+            'subnet': self.subnet.compressed,
+            'subnet_prefix': self.subnet.prefixlen,
+            'default_gw': self.default_gw,
+        }
+
+        logger.debug('Subnet: %s, default gateway: %s', self.subnet.compressed, self.default_gw)
 
         if not self._sanity_check():
             raise OSError('IP forwarding is not enabled in the kernel. Check https://www.kernel.org/doc/Documentation/networking/ip-sysctl.txt')
@@ -51,12 +64,11 @@ class NetworkSandbox(object):
     def _sanity_check():
         return open('/proc/sys/net/ipv4/ip_forward').read().strip() == '1'
 
+    def get_next_address(self, with_prefix=False):
+        return "%s" % (next(self.hosts_pool).compressed) + ('/%d' % self.subnet.prefixlen if with_prefix else '')
+
     def call(self, cmds, check=True):
-        sub = {
-            'i': self.counter,
-            'token': self.token
-        }
-        cmds = [i.format(**sub) for i in cmds]
+        cmds = [i.format(**self.patterns) for i in cmds]
 
         if check:
             for cmd in cmds:
@@ -68,11 +80,12 @@ class NetworkSandbox(object):
                 subprocess.call(cmd, shell=True)
 
     def setup(self):
+
         cmd = [
             "brctl addbr br-router-{token}",
             "ip link set up br-router-{token}",
-            "ip addr add 10.32.255.254/16 dev br-router-{token}",
-            "iptables -A INPUT -d 10.32.255.254/16 -p icmp -j ACCEPT"
+            "ip addr add {default_gw}/{subnet_prefix} dev br-router-{token}",
+            "iptables -A INPUT -d {default_gw} -p icmp -j ACCEPT"
         ]
 
         self.call(cmd)
@@ -97,8 +110,8 @@ class NetworkSandbox(object):
                 'router_ns': router_ns.name,
                 'process_ns': process_ns.name,
                 'i': self.counter,
-                'token': self.token
             }
+            sub.update(self.patterns)
             return [i.format(**sub) for i in cmds]
 
         cmd = [
@@ -114,9 +127,8 @@ class NetworkSandbox(object):
             "ip link set up lo",
 
             "ip link set up wan",
-            "ip addr add 10.32.0.{i}/16 dev wan",
-            "ip route add default via 10.32.255.254",
-
+            "ip addr add %s  dev wan" % self.get_next_address(with_prefix=True),
+            "ip route add default via {default_gw}",
             "ip link add to_process type veth peer name to_router",
             "ip link set to_router netns {process_ns}",
             "ip addr add 10.0.0.1/24 dev to_process",
