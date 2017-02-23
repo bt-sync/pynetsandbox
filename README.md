@@ -10,9 +10,22 @@ main.py
 ```
 from netsandbox import NetworkSandbox
 
-with NetworkSandbox() as ns:
-    p = ns.spawn("ping 10.32.255.254 -c 3")
+with NetworkSandbox('10.1.0.0/16') as ns:
+    p = ns.spawn('ping 10.1.0.1 -c 3')
     p.wait(timeout=10)
+
+try:
+    ns = NetworkSandbox('10.2.0.0/16')
+    p = ns.spawn('ping 10.2.0.1 -c 3')
+    p.wait(timeout=10)
+finally:
+    ns.release()
+
 ```
 
 `sudo python3 main.py`
+
+
+## Before contributing
+
+`pylint --rcfile .pylintrc *.py netsandbox`
