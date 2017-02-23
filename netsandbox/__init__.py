@@ -35,6 +35,9 @@ class NetworkSandbox(object):
         self.namespaces = []
         self.counter = 1
 
+        if not self._sanity_check():
+            raise OSError('IP forwarding is not enabled in the kernel. Check https://www.kernel.org/doc/Documentation/networking/ip-sysctl.txt')
+
         self.setup()
 
     def __enter__(self):
@@ -43,6 +46,10 @@ class NetworkSandbox(object):
     def __exit__(self, exc_type, exc_value, traceback):
         self.release()
         return self
+
+    @staticmethod
+    def _sanity_check():
+        return open('/proc/sys/net/ipv4/ip_forward').read().strip() == '1'
 
     def call(self, cmds, check=True):
         sub = {
