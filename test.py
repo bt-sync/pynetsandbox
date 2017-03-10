@@ -2,6 +2,8 @@
 
 import unittest
 import logging
+import subprocess
+import time
 from netsandbox import NetworkSandbox
 
 logging.basicConfig(level=logging.DEBUG)
@@ -21,6 +23,14 @@ class TestStringMethods(unittest.TestCase):
                 p = ns.spawn("ping {} -c 3".format(a))
                 if p.wait(timeout=10) != 0:
                     raise OSError('destination %s is unreachable' % a)
+
+    # def test_mappings(self):
+    #     with NetworkSandbox() as ns:
+    #         mapping = {'tcp': {8000: 8000}}
+    #         p = ns.spawn("python3 -m http.server 8000", mapping)
+    #         subprocess.call("wget http://10.1.0.2:8000 -O -", shell=True)
+    #         p.kill()
+    #         p.wait(timeout=3)
 
 if __name__ == '__main__':
     unittest.main()

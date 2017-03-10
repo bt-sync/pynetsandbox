@@ -3,6 +3,7 @@ import os
 import binascii
 import random
 import logging
+import ipaddress
 from ipaddress import IPv4Network
 
 logger = logging.getLogger(__name__)
@@ -96,7 +97,7 @@ class NetworkSandbox(object):
 
         self.call(["ip link del br-router-{token}"], check=False)
 
-    def spawn(self, command):
+    def spawn(self, command, port_mapping=dict()):
         router_ns = NetworkNamespace(
             "%s_router%d" % (self.token, self.counter))
         process_ns = NetworkNamespace(
@@ -123,11 +124,13 @@ class NetworkSandbox(object):
 
         self.call(preprocess(cmd))
 
+        router_wan_addr = self.get_next_address()
+        # setup router
         cmd = [
             "ip link set up lo",
 
             "ip link set up wan",
-            "ip addr add %s  dev wan" % self.get_next_address(with_prefix=True),
+            "ip addr add %s dev wan" % ("%s/%d" % (router_wan_addr, self.subnet.prefixlen)),
             "ip route add default via {default_gw}",
             "ip link add to_process type veth peer name to_router",
             "ip link set to_router netns {process_ns}",
@@ -136,12 +139,23 @@ class NetworkSandbox(object):
 
             "iptables -A INPUT -p icmp -j ACCEPT",
             "iptables -P INPUT DROP",
-            "iptables -t nat -A POSTROUTING -o wan -j MASQUERADE",
-            "iptables -A FORWARD -o wan -j ACCEPT",
-            "iptables -A FORWARD -m state --state ESTABLISHED,RELATED -j ACCEPT",
         ]
+
+        for protocol, mappings in port_mapping.items():
+            for router_port, process_port in mappings.items():
+                patterns = {'router_port': router_port, 'process_port': process_port, 'proto': protocol, 'router_wan_addr': router_wan_addr, 'process_addr': "10.0.0.2"}
+                cmd.append("iptables -t nat -A PREROUTING -p {proto} -d {router_wan_addr} --dport {router_port} -j DNAT --to {process_addr}:{process_port}".format(**patterns))
+                cmd.append("iptables -t nat -A POSTROUTING -p {proto} -s {process_addr} --sport {process_port} -j SNAT --to {router_wan_addr}:{router_port}".format(**patterns))
+                logging.debug(patterns)
+
+        cmd.extend(["iptables -t nat -A POSTROUTING -o wan -j MASQUERADE",
+            "iptables -A FORWARD -o wan -j ACCEPT",
+            "iptables -A FORWARD -i wan -j ACCEPT"]
+        )
+
         router_ns.call(preprocess(cmd))
 
+        # setup process container
         cmd = [
             "ip link set up lo",
 
