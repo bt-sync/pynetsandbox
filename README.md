@@ -10,6 +10,11 @@ http://man7.org/linux/man-pages/man7/namespaces.7.html
 
 ## How to use
 
+For first enable `ip_forward`ing in the kernel.
+`echo 1 | sudo tee /proc/sys/net/ipv4/ip_forward`
+
+Then:
+
 main.py
 ```
 from netsandbox import NetworkSandbox

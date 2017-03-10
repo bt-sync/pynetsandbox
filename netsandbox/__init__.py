@@ -136,8 +136,7 @@ class NetworkSandbox(object):
 
             "iptables -A INPUT -p icmp -j ACCEPT",
             "iptables -P INPUT DROP",
-            "iptables -t nat -A POSTROUTING -p udp -o wan -j MASQUERADE --to-ports 4000",
-            "iptables -t nat -A POSTROUTING -p icmp -o wan -j MASQUERADE",
+            "iptables -t nat -A POSTROUTING -o wan -j MASQUERADE",
             "iptables -A FORWARD -o wan -j ACCEPT",
             "iptables -A FORWARD -m state --state ESTABLISHED,RELATED -j ACCEPT",
         ]
