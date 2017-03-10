@@ -146,7 +146,6 @@ class NetworkSandbox(object):
                 patterns = {'router_port': router_port, 'process_port': process_port, 'proto': protocol, 'router_wan_addr': router_wan_addr, 'process_addr': "10.0.0.2"}
                 cmd.append("iptables -t nat -A PREROUTING -p {proto} -d {router_wan_addr} --dport {router_port} -j DNAT --to {process_addr}:{process_port}".format(**patterns))
                 cmd.append("iptables -t nat -A POSTROUTING -p {proto} -s {process_addr} --sport {process_port} -j SNAT --to {router_wan_addr}:{router_port}".format(**patterns))
-                logging.debug(patterns)
 
         cmd.extend(["iptables -t nat -A POSTROUTING -o wan -j MASQUERADE",
             "iptables -A FORWARD -o wan -j ACCEPT",
@@ -170,4 +169,4 @@ class NetworkSandbox(object):
         process_ns.call(preprocess(cmd))
         self.counter += 1
 
-        return process_ns.spawn(command)
+        return process_ns.spawn(command), router_wan_addr
