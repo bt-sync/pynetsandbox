@@ -97,7 +97,10 @@ class NetworkSandbox(object):
 
         self.call(["ip link del br-router-{token}"], check=False)
 
-    def spawn(self, command, port_mapping=dict()):
+    def spawn(self, command, port_mapping=None):
+        if port_mapping is None:
+            port_mapping =  dict()
+
         router_ns = NetworkNamespace(
             "%s_router%d" % (self.token, self.counter))
         process_ns = NetworkNamespace(
@@ -170,3 +173,6 @@ class NetworkSandbox(object):
         self.counter += 1
 
         return process_ns.spawn(command), router_wan_addr
+
+    def Popen(self, args, port_mapping=None):
+        return self.spawn(' '.join(args), port_mapping)
