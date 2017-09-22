@@ -37,9 +37,9 @@ class NetworkSandbox(object):
         self.namespaces = []
         self.counter = 1
         self.subnet = IPv4Network(subnet)
-        self.hosts_pool = self.subnet.hosts() 
+        self.hosts_pool = self.subnet.hosts()
         self.default_gw = self.get_next_address()
-        
+
         self.patterns = {
             'token': self.token,
             'subnet': self.subnet.compressed,
@@ -173,6 +173,111 @@ class NetworkSandbox(object):
         self.counter += 1
 
         return process_ns.spawn(command), router_wan_addr
+
+    def Popen(self, args, port_mapping=None):
+        return self.spawn(' '.join(args), port_mapping)
+
+
+class WANNetworkSandbox(object):
+
+    def __init__(self, subnet='10.1.0.0/16'):
+        self.token = binascii.b2a_hex(os.urandom(4)).decode()
+        self.namespaces = []
+        self.counter = 1
+        self.subnet = IPv4Network(subnet)
+        self.hosts_pool = self.subnet.hosts()
+        self.default_gw = self.get_next_address()
+
+        self.patterns = {
+            'token': self.token,
+            'subnet': self.subnet.compressed,
+            'subnet_prefix': self.subnet.prefixlen,
+            'default_gw': self.default_gw,
+        }
+
+        logger.debug('Subnet: %s, default gateway: %s', self.subnet.compressed, self.default_gw)
+        self.setup()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.release()
+        return self
+
+    def get_next_address(self, with_prefix=False):
+        return "%s" % (next(self.hosts_pool).compressed) + ('/%d' % self.subnet.prefixlen if with_prefix else '')
+
+    def call(self, cmds, check=True):
+        cmds = [i.format(**self.patterns) for i in cmds]
+
+        if check:
+            for cmd in cmds:
+                logger.debug(cmd)
+                subprocess.check_output(cmd, shell=True)
+        else:
+            for cmd in cmds:
+                logger.debug(cmd)
+                subprocess.call(cmd, shell=True)
+
+    def setup(self):
+
+        cmd = [
+            "brctl addbr br-router-{token}",
+            "ip link set up br-router-{token}",
+            "ip addr add {default_gw}/{subnet_prefix} dev br-router-{token}",
+            "tc qdisc add dev br-router-{token} root handle 1: netem delay 150ms loss random 2% limit 12500",
+            "iptables -A INPUT -d {default_gw} -p icmp -j ACCEPT"
+        ]
+
+        self.call(cmd)
+
+    def release(self):
+        for n in self.namespaces:
+            n.release()
+
+        self.call(["ip link del br-router-{token}"], check=False)
+
+    def spawn(self, command, port_mapping=None):
+        if port_mapping is None:
+            port_mapping =  dict()
+
+        process_ns = NetworkNamespace("%s_process%d" % (self.token, self.counter))
+        self.namespaces.append(process_ns)
+
+        def preprocess(cmds):
+            sub = {
+                'process_ns': process_ns.name,
+                'i': self.counter,
+            }
+            sub.update(self.patterns)
+            return [i.format(**sub) for i in cmds]
+
+        cmd = [
+            "ip link add r{i}-{token} type veth peer name wan",
+            "ip link set up r{i}-{token}",
+            "brctl addif br-router-{token} r{i}-{token}",
+            "ip link set wan netns {process_ns}",
+        ]
+
+        self.call(preprocess(cmd))
+
+        wan_addr = self.get_next_address()
+        # setup router
+        cmd = [
+            "ip link set up lo",
+
+            "ip link set up wan",
+            "ip addr add %s dev wan" % ("%s/%d" % (wan_addr, self.subnet.prefixlen)),
+            "ip route add default via {default_gw}",
+            "iptables -P INPUT ACCEPT",
+            "tc qdisc replace dev wan root fq",
+            "echo bbr | tee /proc/sys/net/ipv4/tcp_congestion_control"
+        ]
+        process_ns.call(preprocess(cmd))
+        self.counter += 1
+
+        return process_ns.spawn(command), wan_addr
 
     def Popen(self, args, port_mapping=None):
         return self.spawn(' '.join(args), port_mapping)

@@ -3,11 +3,11 @@
 import unittest
 import logging
 
-from netsandbox import NetworkSandbox
+from netsandbox import NetworkSandbox, WANNetworkSandbox
 
 logging.basicConfig(level=logging.DEBUG)
 
-class TestStringMethods(unittest.TestCase):
+class TestNAT(unittest.TestCase):
 
     def test_namespace(self):
         with NetworkSandbox() as ns:
@@ -32,6 +32,15 @@ class TestStringMethods(unittest.TestCase):
     #         subprocess.call("wget http://10.1.0.2:8000 -O -", shell=True)
     #         p.kill()
     #         p.wait(timeout=3)
+
+
+class TestWAN(unittest.TestCase):
+        def test_namespace(self):
+            with WANNetworkSandbox() as ns:
+                for a in ["10.1.0.2", "10.1.0.1"]:
+                    p, _ = ns.spawn("ping {} -c 3".format(a))
+                    if p.wait(timeout=10) != 0:
+                        raise OSError('destination %s is unreachable' % a)
 
 if __name__ == '__main__':
     unittest.main()
