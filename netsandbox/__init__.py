@@ -32,13 +32,14 @@ class NetworkNamespace(object):
 
 class NetworkSandbox(object):
 
-    def __init__(self, subnet='10.1.0.0/16'):
+    def __init__(self, subnet='10.1.0.0/16', simulate_wan=False):
         self.token = binascii.b2a_hex(os.urandom(4)).decode()
         self.namespaces = []
         self.counter = 1
         self.subnet = IPv4Network(subnet)
         self.hosts_pool = self.subnet.hosts()
         self.default_gw = self.get_next_address()
+        self.simulate_wan = simulate_wan
 
         self.patterns = {
             'token': self.token,
@@ -144,6 +145,9 @@ class NetworkSandbox(object):
             "iptables -P INPUT DROP",
         ]
 
+        if self.simulate_wan:
+            cmd.append("tc qdisc add dev to_process root handle 1: netem delay 150ms loss random 2% limit 12500")
+
         for protocol, mappings in port_mapping.items():
             for router_port, process_port in mappings.items():
                 patterns = {'router_port': router_port, 'process_port': process_port, 'proto': protocol, 'router_wan_addr': router_wan_addr, 'process_addr': "10.0.0.2"}
@@ -164,11 +168,14 @@ class NetworkSandbox(object):
             "ip addr add 10.0.0.2/24 dev to_router",
             "ip link set up to_router",
             "ip route add default via 10.0.0.1",
-
             "iptables -P INPUT ACCEPT",
             "iptables -P OUTPUT ACCEPT",
             "iptables -P FORWARD DROP"
         ]
+
+        if self.simulate_wan:
+            cmd.append("tc qdisc replace dev to_router root fq")
+
         process_ns.call(preprocess(cmd))
         self.counter += 1
 
@@ -178,7 +185,7 @@ class NetworkSandbox(object):
         return self.spawn(' '.join(args), port_mapping)
 
 
-class WANNetworkSandbox(object):
+class LocalNetworkSandbox(object):
 
     def __init__(self, subnet='10.1.0.0/16'):
         self.token = binascii.b2a_hex(os.urandom(4)).decode()
@@ -226,8 +233,8 @@ class WANNetworkSandbox(object):
             "brctl addbr br-router-{token}",
             "ip link set up br-router-{token}",
             "ip addr add {default_gw}/{subnet_prefix} dev br-router-{token}",
-            "tc qdisc add dev br-router-{token} root handle 1: netem delay 150ms loss random 2% limit 12500",
-            "iptables -A INPUT -d {default_gw} -p icmp -j ACCEPT"
+            "iptables -A INPUT -d {default_gw} -p icmp -j ACCEPT",
+            "iptables -A FORWARD -s {subnet} -j ACCEPT"
         ]
 
         self.call(cmd)
@@ -263,7 +270,7 @@ class WANNetworkSandbox(object):
         self.call(preprocess(cmd))
 
         wan_addr = self.get_next_address()
-        # setup router
+
         cmd = [
             "ip link set up lo",
 
@@ -271,8 +278,7 @@ class WANNetworkSandbox(object):
             "ip addr add %s dev wan" % ("%s/%d" % (wan_addr, self.subnet.prefixlen)),
             "ip route add default via {default_gw}",
             "iptables -P INPUT ACCEPT",
-            "tc qdisc replace dev wan root fq",
-            "echo bbr | tee /proc/sys/net/ipv4/tcp_congestion_control"
+            "iptables -P OUTPUT ACCEPT"
         ]
         process_ns.call(preprocess(cmd))
         self.counter += 1

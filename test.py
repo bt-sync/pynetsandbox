@@ -3,11 +3,11 @@
 import unittest
 import logging
 
-from netsandbox import NetworkSandbox, WANNetworkSandbox
+from netsandbox import NetworkSandbox, LocalNetworkSandbox
 
 logging.basicConfig(level=logging.DEBUG)
 
-class TestNAT(unittest.TestCase):
+class NAT(unittest.TestCase):
 
     def test_namespace(self):
         with NetworkSandbox() as ns:
@@ -34,13 +34,29 @@ class TestNAT(unittest.TestCase):
     #         p.wait(timeout=3)
 
 
-class TestWAN(unittest.TestCase):
+class WAN(unittest.TestCase):
+    def test_namespace(self):
+        with NetworkSandbox(simulate_wan=True) as ns:
+            for a in ["10.1.0.1", "10.1.0.2", "10.0.0.2", "127.0.0.1"]:
+                p, _ = ns.spawn("ping {} -c 5".format(a))
+                if p.wait(timeout=30) != 0:
+                    raise OSError('destination %s is unreachable' % a)
+
+
+class LAN(unittest.TestCase):
         def test_namespace(self):
-            with WANNetworkSandbox() as ns:
+            with LocalNetworkSandbox() as ns:
                 for a in ["10.1.0.2", "10.1.0.1"]:
                     p, _ = ns.spawn("ping {} -c 3".format(a))
                     if p.wait(timeout=10) != 0:
                         raise OSError('destination %s is unreachable' % a)
+
+
+        def test_namespace2(self):
+            with LocalNetworkSandbox() as ns:
+                    for p, _  in [ns.spawn("ping 10.1.0.3 -c 10"), ns.spawn("ping 10.1.0.2 -c 10")]:
+                        if p.wait(timeout=30) != 0:
+                            raise OSError('destination is unreachable')
 
 if __name__ == '__main__':
     unittest.main()
