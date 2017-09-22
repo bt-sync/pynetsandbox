@@ -146,7 +146,7 @@ class NetworkSandbox(object):
         ]
 
         if self.simulate_wan:
-            cmd.append("tc qdisc add dev to_process root handle 1: netem delay 150ms loss random 2% limit 12500")
+            cmd.append("tc qdisc replace dev wan root handle 1: netem delay 150ms loss random 2% limit 12500")
 
         for protocol, mappings in port_mapping.items():
             for router_port, process_port in mappings.items():
