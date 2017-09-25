@@ -31,9 +31,8 @@ class NetworkNamespace(object):
 
 
 class NetworkSandbox(object):
-
     def __init__(self, subnet='10.1.0.0/16', simulate_wan=False):
-        self.token = binascii.b2a_hex(os.urandom(4)).decode()
+        self.token = binascii.b2a_hex(os.urandom(2)).decode()
         self.namespaces = []
         self.counter = 1
         self.subnet = IPv4Network(subnet)
@@ -80,6 +79,10 @@ class NetworkSandbox(object):
             for cmd in cmds:
                 logger.debug(cmd)
                 subprocess.call(cmd, shell=True)
+
+    @property
+    def bridge_iface(self):
+        return "br-router-{token}".format(**self.patterns)
 
     def setup(self):
 
