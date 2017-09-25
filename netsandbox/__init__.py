@@ -188,15 +188,17 @@ class NetworkSandbox(object):
         return self.spawn(' '.join(args), port_mapping)
 
 
+
 class LocalNetworkSandbox(object):
 
-    def __init__(self, subnet='10.1.0.0/16'):
-        self.token = binascii.b2a_hex(os.urandom(4)).decode()
+    def __init__(self, subnet='10.1.0.0/16', simulate_wan=False):
+        self.token = binascii.b2a_hex(os.urandom(2)).decode()
         self.namespaces = []
         self.counter = 1
         self.subnet = IPv4Network(subnet)
         self.hosts_pool = self.subnet.hosts()
         self.default_gw = self.get_next_address()
+        self.simulate_wan = simulate_wan
 
         self.patterns = {
             'token': self.token,
@@ -270,6 +272,9 @@ class LocalNetworkSandbox(object):
             "ip link set wan netns {process_ns}",
         ]
 
+        if self.simulate_wan:
+            cmd.append("tc qdisc replace dev r{i}-{token} root handle 1: netem delay 150ms loss random 2% limit 12500")
+
         self.call(preprocess(cmd))
 
         wan_addr = self.get_next_address()
@@ -284,9 +289,10 @@ class LocalNetworkSandbox(object):
             "iptables -P OUTPUT ACCEPT"
         ]
         process_ns.call(preprocess(cmd))
+        
+        r = process_ns.spawn(command), wan_addr, "r{i}-{token}".format(i=self.counter, **self.patterns)
         self.counter += 1
-
-        return process_ns.spawn(command), wan_addr
+        return r
 
     def Popen(self, args, port_mapping=None):
         return self.spawn(' '.join(args), port_mapping)

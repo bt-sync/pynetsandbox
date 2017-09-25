@@ -51,13 +51,13 @@ class LAN(unittest.TestCase):
     def test_namespace(self):
         with LocalNetworkSandbox() as ns:
             for a in ["10.1.0.2", "10.1.0.1"]:
-                p, _ = ns.spawn("ping {} -c 3".format(a))
+                p, _, _= ns.spawn("ping {} -c 3".format(a))
                 if p.wait(timeout=10) != 0:
                     raise OSError('destination %s is unreachable' % a)
 
     def test_namespace2(self):
         with LocalNetworkSandbox() as ns:
-            for p, _ in [ns.spawn("ping 10.1.0.3 -c 10"), ns.spawn("ping 10.1.0.2 -c 10")]:
+            for p, _, _ in [ns.spawn("ping 10.1.0.3 -c 10"), ns.spawn("ping 10.1.0.2 -c 10")]:
                 if p.wait(timeout=30) != 0:
                     raise OSError('destination is unreachable')
 
